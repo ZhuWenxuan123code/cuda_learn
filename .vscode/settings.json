@@ -1,4 +1,5 @@
 {
      "cmake.cmakePath": "/usr/bin/cmake",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
     //  "cmake.options.statusBarVisibility": "visible"
 }
