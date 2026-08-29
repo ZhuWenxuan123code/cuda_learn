@@ -24,3 +24,6 @@ Quantization Kernel
         |
         ↓
 Inference Kernels
+
+prefill：GEMM
+decode：GEMV
