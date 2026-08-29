@@ -98,7 +98,7 @@ __global__ void gemm_shared_kernel(const float *A,
                                    int N,
                                    int K)
 {
-    __shared__ float As[TILE_DIM][TILE_DIM];
+    __shared__ float As[TILE_DIM][TILE_DIM]; // 不会出现bank conflict
     __shared__ float Bs[TILE_DIM][TILE_DIM];
 
     int row = blockIdx.y * TILE_DIM + threadIdx.y; // C
@@ -119,8 +119,15 @@ __global__ void gemm_shared_kernel(const float *A,
 
     for (int t = 0; t < K; t += TILE_DIM)
     {
-        As[ty][tx] = A[row * K + (t + tx)];
-        Bs[ty][tx] = B[(t + ty) * N + col];
+        // As[ty][tx] = A[row * K + (t + tx)]; // 没有零填充保护
+        // Bs[ty][tx] = B[(t + ty) * N + col]; // 没有零填充保护
+        As[ty][tx] = (row < M && t + tx < K)
+                         ? A[row * K + (t + tx)]
+                         : 0.0f;
+
+        Bs[ty][tx] = (t + ty < K && col < N)
+                         ? B[(t + ty) * N + col]
+                         : 0.0f;
         __syncthreads();                   // 等大家都搬完
         for (int k = 0; k < TILE_DIM; k++) // 只在 Shared MEM 里算
         {
