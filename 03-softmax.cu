@@ -23,7 +23,7 @@ constexpr int BLOCK_SIZE = 256;
 // warp 内 max reduction
 __device__ __forceinline__ float warpReduceMax(float val)
 {
-    for (int offset = warpSize / 2; offset > 0; offset << 1)
+    for (int offset = warpSize / 2; offset > 0; offset >>= 1)
     {
         float other = __shfl_down_sync(0xffffffff, val, offset);
         val = fmaxf(val, other);
@@ -33,7 +33,7 @@ __device__ __forceinline__ float warpReduceMax(float val)
 // warp 内 sum reduction
 __device__ __forceinline__ float warpReduceSum(float val)
 {
-    for (int offset = warpSize / 2; offset > 0; offset << 1)
+    for (int offset = warpSize / 2; offset > 0; offset >>= 1)
     {
         val += __shfl_down_sync(0xffffffff, val, offset);
     }
@@ -55,18 +55,22 @@ __device__ __forceinline__ float blockReduceMax(float val)
     // 让 warp 0 来进行最后的规约。
     int num_warps = (blockDim.x + warpSize - 1) / warpSize;
 
-    val = threadIdx.x < num_warps ? shared[lane] : 0.0f;
-    if (warp_id == 0)
-    {
-        val = warpReduceMax(val);
-    }
-
-    // if (warp_id == 0) // 更易读的思路，此处if不能去掉，不然block里每个warp都会重复执行操作。
+    // val = (threadIdx.x < num_warps) ? shared[lane] : 0.0f;
+    // if (warp_id == 0)
     // {
-    //     val = (lane < num_warps) ? shared[lane] : 0.0f;
-    //     val = warpReduceSum(val);
+    //     val = warpReduceMax(val);
     // }
-    return val;
+
+    if (warp_id == 0) // 更易读的思路，此处if不能去掉，不然block里每个warp都会重复执行操作。
+    {
+        val = (lane < num_warps) ? shared[lane] : -INFINITY;
+        val = warpReduceMax(val);
+
+        if (lane == 0)
+            shared[0] = val;
+    }
+    __syncthreads();
+    return shared[0];
 }
 // block 内 sum reduction
 __device__ __forceinline__ float blockReduceSum(float val)
@@ -81,9 +85,13 @@ __device__ __forceinline__ float blockReduceSum(float val)
     int num_warps = (blockDim.x + warpSize - 1) / warpSize;
     if (warp_id == 0)
     {
-        val = lane < num_warps ? shared[lane] : 0.0f;
+        val = (lane < num_warps) ? shared[lane] : 0.0f;
         val = warpReduceSum(val);
+        if (lane == 0)
+            shared[0] = val;
     }
+    __syncthreads();
+    return shared[0];
 }
 /*
  * Row-wise softmax
@@ -96,7 +104,7 @@ __device__ __forceinline__ float blockReduceSum(float val)
 __global__ void softmax_kernel(const float *input, float *output, int num_rows, int num_cols)
 {
     int row = blockIdx.x;
-    if (row >= num_cols)
+    if (row >= num_rows)
         return;
     const float *row_input = input + row * num_cols;
     float *row_output = output + row * num_cols;
@@ -117,7 +125,7 @@ __global__ void softmax_kernel(const float *input, float *output, int num_rows, 
     for (int col = tid; col < num_cols; col += blockDim.x)
     {
         float val = expf(row_input[col] - row_max);
-        output[col] = val;
+        row_output[col] = val;
         local_sum += val;
     }
     float row_sum = blockReduceSum(local_sum);
@@ -136,16 +144,16 @@ void cpu_softmax(const std::vector<float> &input, std::vector<float> &output, in
 {
     for (int r = 0; r < num_rows; r++)
     {
-        const float *row_input = input.data() + r * num_rows;
-        float *row_output = output.data() + r * num_rows;
+        const float *row_input = input.data() + r * num_cols;
+        float *row_output = output.data() + r * num_cols;
         float max = -INFINITY;
         for (int c = 0; c < num_cols; c++)
             max = fmaxf(max, row_input[c]);
         float sum = 0.0f;
         for (int c = 0; c < num_cols; c++)
         {
-            row_output[c] = exp(row_input[c] - max);
-            sum += row_input[c];
+            row_output[c] = expf(row_input[c] - max);
+            sum += row_output[c];
         }
         for (int c = 0; c < num_cols; c++)
             row_output[c] /= sum;

@@ -14,5 +14,10 @@ add_executable(05check_pageable_memory_access learn/05check_pageable_memory_acce
 
 add_executable(01-vector-add 01-vector-add.cu)
 add_executable(02-reduction-sum 02-reduction-sum.cu)
+add_executable(03-softmax 03-softmax.cu)
+add_executable(08-attention 08-attention.cu)
+add_executable(09-fa1 09-fa1.cu)
+add_executable(10-fa2 10-fa2.cu)
+add_executable(11-fa3 11-fa3.cu)
 # 如果链接其他库，用 target_link_libraries
 # target_link_libraries(${PROJECT_NAME} your_library)

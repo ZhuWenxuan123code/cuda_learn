@@ -17,7 +17,7 @@ GEMM                ⭐⭐⭐⭐⭐
 Fused Softmax       ⭐⭐⭐⭐⭐
         |
         ↓
-FlashAttention      ⭐⭐⭐⭐⭐
+FlashAttention 1/2/3      ⭐⭐⭐⭐⭐
         |
         ↓
 Quantization Kernel
